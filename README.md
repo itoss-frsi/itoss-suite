@@ -2,7 +2,7 @@
 
 Spin up the full ITOSS stack (DB, Manager, Collector, Reporting, DS, Frontend, Job Scheduler) with Docker Compose.
 
-## TL;DR
+##
 
 ```bash
 cp .env.example .env
