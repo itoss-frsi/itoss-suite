@@ -1,0 +1,123 @@
+name: itoss-suite
+services:
+  itoss-db:
+    container_name: itoss-db
+    image: itosssoftware/itoss-db:v8
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB:       ${POSTGRES_DB:-postgres}
+      ITOSS_USER:        ${ITOSS_USER:-itoss}
+      ITOSS_PASSWORD:    ${ITOSS_PASSWORD:-admin}
+      ITOSS_DB:          ${ITOSS_DB:-itossdb}
+      ITOSS_DB_DUMPFILE: ${ITOSS_DB_DUMPFILE:-initial_itossdb.dump}
+    healthcheck:
+      test: [ "CMD-SHELL",
+        "pg_isready -U postgres -d postgres &&           test -f /var/lib/postgresql/data/.itoss_init_done" ]
+      interval: 5s
+      retries: 20
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  itoss-manager:
+    container_name: itoss-manager
+    image: itosssoftware/itoss-manager:v8
+    depends_on:
+      itoss-db:
+        condition: service_healthy
+    ports:
+      - "${MANAGER_PORT:-8080}:8080"
+    environment:
+      CONFIG_DB_URL:      ${CONFIG_DB_URL:-jdbc:postgresql://itoss-db:5432/itossdb}
+      CONFIG_DB_USER:     ${CONFIG_DB_USER:-itoss}
+      CONFIG_DB_PASSWORD: ${CONFIG_DB_PASSWORD:-admin}
+      TIMESERIES_DB_URL:         ${TIMESERIES_DB_URL:-jdbc:postgresql://itoss-db:5432/itossdb}
+      TIMESERIES_DB_USER:        ${TIMESERIES_DB_USER:-itoss}
+      TIMESERIES_DB_PASSWORD:    ${TIMESERIES_DB_PASSWORD:-admin}
+      PORT: 8080
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://itoss-manager:8080/stats || exit 1"]
+      interval: 10s
+      retries: 12
+      start_period: 30s
+
+  itoss-collector:
+    container_name: itoss-collector
+    image: itosssoftware/itoss-collector:v8
+    depends_on:
+      itoss-db:
+        condition: service_healthy
+      itoss-manager:
+        condition: service_healthy
+    ports:
+      - "${COLLECTOR_PORT:-8081}:8081"
+    environment:
+      MANAGER_URL: http://itoss-manager:8080
+      MANAGER_TIMEOUT: 60000
+      BUFFER_FREQUENCY: 60000
+      TIMESERIES_DB_URL: ${TIMESERIES_DB_URL:-jdbc:postgresql://itoss-db:5432/itossdb}
+      TIMESERIES_DB_USER: ${TIMESERIES_DB_USER:-itoss}
+      TIMESERIES_DB_PASSWORD: ${TIMESERIES_DB_PASSWORD:-admin}
+      PORT: 8081
+    restart: unless-stopped
+
+  itoss-frontend:
+    container_name: itoss-frontend
+    image: itosssoftware/itoss-frontend:v8
+    depends_on:
+      - itoss-manager
+      - itoss-reporting
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    restart: unless-stopped
+
+  itoss-reporting:
+    image: itosssoftware/itoss-reporting:v8
+    container_name: itoss-reporting
+    environment:
+      CONFIG_DB_URL: ${CONFIG_DB_URL:-jdbc:postgresql://itoss-db:5432/itossdb}
+      CONFIG_DB_USER: ${CONFIG_DB_USER:-itoss}
+      CONFIG_DB_PASSWORD: ${CONFIG_DB_PASSWORD:-admin}
+      PORT: 8079
+      TEMPLATE_PATH:  /app/templates/
+    depends_on:
+      itoss-db:
+        condition: service_healthy
+    ports:
+      - "${REPORTING_PORT:-8079}:8079"
+
+  itoss-ds:
+    image: itosssoftware/itoss-ds:v8
+    container_name: itoss-ds
+    environment:
+      CONFIG_DB_URL: ${CONFIG_DB_URL:-jdbc:postgresql://itoss-db:5432/itossdb}
+      CONFIG_DB_USER: ${CONFIG_DB_USER:-itoss}
+      CONFIG_DB_PASSWORD: ${CONFIG_DB_PASSWORD:-admin}
+      SERVER_PORT: 8085
+    depends_on:
+      itoss-db:
+        condition: service_healthy
+    ports:
+      - "${DS_PORT:-8085}:8085"
+
+  itoss-jobscheduler:
+    container_name: itoss-jobscheduler
+    image: itosssoftware/itoss-jobscheduler:v8
+    depends_on:
+      itoss-db:
+        condition: service_healthy
+    ports:
+      - "${JOBSCHEDULER_PORT:-8084}:8084"
+    environment:
+      CONFIG_DB_URL:      ${CONFIG_DB_URL:-jdbc:postgresql://itoss-db:5432/itossdb}
+      CONFIG_DB_USER:     ${CONFIG_DB_USER:-itoss}
+      CONFIG_DB_PASSWORD: ${CONFIG_DB_PASSWORD:-admin}
+      PORT: 8084
+    restart: unless-stopped
+
+volumes:
+  data:
