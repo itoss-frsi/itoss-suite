@@ -98,6 +98,12 @@ services:
       CONFIG_DB_USER: ${CONFIG_DB_USER:-itoss}
       CONFIG_DB_PASSWORD: ${CONFIG_DB_PASSWORD:-admin}
       SERVER_PORT: 8085
+      SPARK_LOCAL_DIRS: /tmp/spark
+      TMPDIR: /tmp/spark
+      HADOOP_OPTS: -Dhadoop.tmp.dir=/tmp/spark
+
+    volumes:
+      - spark-tmp:/tmp/spark  
     depends_on:
       itoss-db:
         condition: service_healthy
@@ -121,3 +127,4 @@ services:
 
 volumes:
   data:
+  spark-tmp:
